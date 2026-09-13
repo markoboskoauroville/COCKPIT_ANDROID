@@ -7,7 +7,7 @@ import java.io.File
  *
  * Every number the status bar and the notification show comes through here, from files an app
  * is allowed to read on this phone (measured 13.9.2026, Nothing Phone (2a), Android 16, from
- * Termux's own shell): /sys/devices/system/cpu/cpu*/cpuidle/state*/time, cpufreq, /proc/meminfo.
+ * Termux's own shell): /sys/devices/system/cpu/cpu<n>/cpuidle/state<n>/time, cpufreq, /proc/meminfo.
  * NOT /proc/stat, /proc/loadavg or /proc/uptime: an app is denied those. So the CPU number is the
  * idle counters: busy = 1 - (idle gained / wall time) per core, which is /proc/stat's arithmetic
  * from the other side of the ledger. COCKPIT_TERMUX/probe.py does the same sum in Python, so the

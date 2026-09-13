@@ -104,7 +104,7 @@ class MainActivity : ComponentActivity() {
         }
 
         val s = snap
-        val notifOk = Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        val notifOk = if (Build.VERSION.SDK_INT >= 33) checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED else true
 
         LazyColumn(
             modifier = Modifier.fillMaxSize().background(Palette.bg).safeDrawingPadding().padding(horizontal = 12.dp),
@@ -131,7 +131,7 @@ class MainActivity : ComponentActivity() {
             item { Heading("2 · now" + (s?.let { "  ·  up " + Probe.duration(it.uptimeS) } ?: "")) }
             item {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Dial("% cpu", s?.busy?.pct?.toString(), s?.busy?.let { b -> "cores " + b.perCore.joinToString(" ") + (s.shellCpu?.let { "\nshell says $it %" } ?: "") } ?: "the idle counters of every core", s?.busy?.pct, (s?.busy?.pct ?: 0) >= 90, Modifier.weight(1f))
+                    Dial("% cpu", s?.busy?.pct?.toString(), s?.busy?.let { b -> "cores " + b.perCore.joinToString(" ") + (s?.shellCpu?.let { "\nshell says $it %" } ?: "") } ?: "the idle counters of every core", s?.busy?.pct, (s?.busy?.pct ?: 0) >= 90, Modifier.weight(1f))
                     val top = s?.clusters?.maxByOrNull { it.curMhz }
                     Dial("GHz", top?.let { String.format(java.util.Locale.US, "%.2f", it.curMhz / 1000.0) }, s?.clusters?.joinToString(" · ") { "${it.name.replace("policy", "c")} ${String.format(java.util.Locale.US, "%.1f", it.curMhz / 1000.0)}/${String.format(java.util.Locale.US, "%.1f", it.maxMhz / 1000.0)}" } ?: "clusters", top?.pct, false, Modifier.weight(1f))
                 }
@@ -139,7 +139,7 @@ class MainActivity : ComponentActivity() {
             item {
                 val m = s?.memory
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Dial("% ram", m?.usedPct?.toString(), m?.let { "${String.format(java.util.Locale.US, "%.1f", it.usedMb / 1024.0)} of ${String.format(java.util.Locale.US, "%.1f", it.totalMb / 1024.0)} GB · ${it.availableMb} MB available" + (if (s.lowMemory) " · LOW" else "") } ?: "used of total", m?.usedPct, s?.lowMemory == true, Modifier.weight(1f))
+                    Dial("% ram", m?.usedPct?.toString(), m?.let { "${String.format(java.util.Locale.US, "%.1f", it.usedMb / 1024.0)} of ${String.format(java.util.Locale.US, "%.1f", it.totalMb / 1024.0)} GB · ${it.availableMb} MB available" + (if (s?.lowMemory == true) " · LOW" else "") } ?: "used of total", m?.usedPct, s?.lowMemory == true, Modifier.weight(1f))
                     Dial("% swap", m?.let { if (it.swapTotalMb > 0) it.swapPct.toString() else "0" }, m?.let { if (it.swapTotalMb > 0) "${String.format(java.util.Locale.US, "%.1f", it.swapUsedMb / 1024.0)} of ${String.format(java.util.Locale.US, "%.1f", it.swapTotalMb / 1024.0)} GB" else "no swap" } ?: "swap", m?.swapPct, (m?.swapPct ?: 0) > 90, Modifier.weight(1f))
                 }
             }
@@ -203,7 +203,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun Dial(unit: String, value: String?, caption: String, pct: Int?, hot: Boolean, modifier: Modifier) {
+    private fun Dial(unit: String, value: String?, caption: String, pct: Int?, hot: Boolean, modifier: Modifier = Modifier) {
         val on = value != null
         Column(modifier.background(Palette.surface, RoundedCornerShape(10.dp)).padding(10.dp)) {
             Row(verticalAlignment = Alignment.Bottom) {
@@ -219,7 +219,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun Button(label: String, enabled: Boolean, modifier: Modifier, danger: Boolean = false, onClick: () -> Unit) {
+    private fun Button(label: String, enabled: Boolean, modifier: Modifier = Modifier, danger: Boolean = false, onClick: () -> Unit) {
         Box(
             modifier.background(Palette.surface, RoundedCornerShape(999.dp)).clickable(enabled = enabled) { onClick() }.padding(vertical = 11.dp, horizontal = 12.dp),
             contentAlignment = Alignment.Center,

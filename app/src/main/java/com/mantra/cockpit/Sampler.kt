@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.PowerManager
 import android.os.SystemClock
 import android.os.StatFs
+import androidx.core.content.ContextCompat
 
 /**
  * ONE SNAPSHOT OF THE PHONE, read on demand by the service and the screen.
@@ -59,7 +60,7 @@ class Sampler(private val context: Context) {
         val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         val mi = ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }
         val mem = Probe.memory() ?: Probe.Memory((mi.totalMem / 1048576).toInt(), ((mi.totalMem - mi.availMem) / 1048576).toInt(), (mi.availMem / 1048576).toInt(), 0, 0, 0)
-        val bat = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val bat = ContextCompat.registerReceiver(context, null, IntentFilter(Intent.ACTION_BATTERY_CHANGED), ContextCompat.RECEIVER_NOT_EXPORTED)
         val level = bat?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
         val scale = bat?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
         val pct = if (level >= 0 && scale > 0) 100 * level / scale else null

@@ -16,6 +16,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 
 /**
  * THE NUMBER IN THE STATUS BAR, AND THE PHONE'S HEALTH UNDER IT.
@@ -44,7 +45,7 @@ class CockpitService : Service() {
 
         fun start(context: Context) {
             val i = Intent(context, CockpitService::class.java)
-            if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(i) else context.startService(i)
+            context.startForegroundService(i)
         }
 
         fun stop(context: Context) {
@@ -78,7 +79,7 @@ class CockpitService : Service() {
             description = "The CPU number in the status bar and the phone's health under it"
             setShowBadge(false)
         })
-        registerReceiver(screen, IntentFilter().apply { addAction(Intent.ACTION_SCREEN_OFF); addAction(Intent.ACTION_SCREEN_ON); addAction(Intent.ACTION_USER_PRESENT) })
+        ContextCompat.registerReceiver(this, screen, IntentFilter().apply { addAction(Intent.ACTION_SCREEN_OFF); addAction(Intent.ACTION_SCREEN_ON); addAction(Intent.ACTION_USER_PRESENT) }, ContextCompat.RECEIVER_NOT_EXPORTED)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

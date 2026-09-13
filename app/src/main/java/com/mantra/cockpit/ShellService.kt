@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit
 class ShellService() : IShell.Stub() {
 
     @Keep
-    @Suppress("unused")
+    @Suppress("unused", "UNUSED_PARAMETER")
     constructor(context: Context) : this()
 
     override fun destroy() {
