@@ -7,7 +7,12 @@ G3 the structural checks (`scripts/verify.py`) and Lint (blocking), G5 loops cou
 
 ## v2, 13.9.2026 — the line's speed, the watts, and the gear
 
-MEASURED, before the push, on a sandbox with a JDK and no Android SDK:
+Built and published by run 4 of the workflow on commit df1eb94, green at the first attempt:
+G1 provenance and the three numbers agreeing, G2 over the history and over the artefact, G3
+verify.py and Lint blocking, G5, Test 1, the signed APK `2-cockpit-v2.apk`, release v2, v0 and
+older deleted so two remain.
+
+MEASURED before the push, on a sandbox with a JDK and no Android SDK:
 
     Test 1          87 JUnit cases, 0 failed, 0.285 s, run on a desk
                     (50 of them inherited from v1 and re-run, 37 new)
