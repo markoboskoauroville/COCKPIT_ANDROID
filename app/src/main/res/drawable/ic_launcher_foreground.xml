@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  THE LAUNCHER SYMBOL: a gauge. MANTRA_MANIFEST/modules/app-icon.md: the launcher hands out a 108
+  canvas and shows the centre 72; the symbol sits in a 42 box centred in that. One arc in slate,
+  the same arc three quarters lit in amber, a needle in sand: the favicon of the Termux page, so
+  the two are recognised as one thing.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M36,60 A18,18 0 0 1 72,60"
+        android:strokeColor="#23303D"
+        android:strokeWidth="6"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M36,60 A18,18 0 0 1 61,43"
+        android:strokeColor="#F59E0B"
+        android:strokeWidth="6"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M54,60 L62,49"
+        android:strokeColor="#F2DDB4"
+        android:strokeWidth="4"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#F2DDB4"
+        android:pathData="M54,60 m-4,0 a4,4 0 1 0 8,0 a4,4 0 1 0 -8,0" />
+</vector>

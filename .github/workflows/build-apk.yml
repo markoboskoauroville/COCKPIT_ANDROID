@@ -1,0 +1,161 @@
+# PINNED BY COMMIT, NEVER BY TAG. Every SHA below is the one MINIMALIST_STOPWATCH resolved on
+# 27.8.2026 from the tag in the comment beside it; a moving tag with a token that can push to the
+# account is how the GhostAction compromise of 2025 emptied other people's CI secrets.
+#
+# The delivery gate's boring half runs here on every push (delivery-gate.md §13): provenance,
+# secrets over the whole history, the structural checks, the loops counted, Test 1, the built
+# APK scanned, the three numbers compared, then publish and keep two releases.
+
+name: Build the Cockpit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: 'platforms;android-35 build-tools;35.0.0'
+
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+
+      - name: "Gate G1 — provenance"
+        id: provenance
+        run: |
+          set -euo pipefail
+          V=$(grep -E '^appVersion=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
+          echo "version: $V"
+          case "$V" in ''|*[!0-9]*) echo "appVersion is not a whole number"; exit 1;; esac
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "commit: $(git rev-parse HEAD)  branch: ${GITHUB_REF_NAME}"
+          DIRTY=$(git status --porcelain | wc -l)
+          echo "uncommitted or untracked files: $DIRTY"
+          [ "$DIRTY" = "0" ]
+          echo "built by: run ${GITHUB_RUN_NUMBER} on ${RUNNER_OS}, not on a desk"
+
+      - name: "Gate G2 — scan the whole history for key shapes"
+        run: |
+          set -euo pipefail
+          COMMITS=$(git rev-list --count HEAD)
+          echo "commits examined: $COMMITS"
+          HITS=$(git log -p --all | grep -acE '(gsk_|AIza|ghp_|github_pat_|sk-ant-|xox[baprs]-)[A-Za-z0-9_-]{20,}' || true)
+          echo "key-shaped strings in history: ${HITS:-0}"
+          [ "${HITS:-0}" = "0" ]
+
+      - name: "Gate G3 — the structural checks"
+        run: python3 scripts/verify.py
+
+      - name: "Gate G5 — loops and waits, counted"
+        run: |
+          set -uo pipefail
+          SRC=app/src/main/java/com/mantra/cockpit
+          echo "source files examined:"; find "$SRC" -name '*.kt' | sed 's/^/  /'
+          nocount() { "$@" || true; }
+          notcomment() { grep -v ':[[:space:]]*\(//\|\*\)' || true; }
+          LOOPS=$( nocount grep -rnE '(while|for|repeat)[[:space:]]*[({]' --include='*.kt' "$SRC" | wc -l)
+          UNBOUNDED=$( nocount grep -rnF 'while (true)' --include='*.kt' "$SRC" | notcomment | wc -l)
+          WAITS=$( nocount grep -rnE 'waitFor\(|delay\(|Timeout' --include='*.kt' "$SRC" | wc -l)
+          echo "loops examined:         $LOOPS"
+          echo "written as while(true): $UNBOUNDED   (the screen's LaunchedEffect loop is bounded by the composition: it dies with the screen)"
+          echo "waits with a deadline:  $WAITS"
+          [ "$UNBOUNDED" -le 2 ] || { echo "an unbounded loop appeared"; exit 1; }
+          [ "$LOOPS" -ge 3 ] || { echo "found fewer loops than exist: this check is broken, not the code"; exit 1; }
+          [ "$WAITS" -ge 2 ] || { echo "the deadlines are gone: this check is broken, not the code"; exit 1; }
+
+      - name: "Test 1 — the mechanism"
+        run: |
+          set -uo pipefail
+          ./gradlew :app:testReleaseUnitTest --no-daemon || true
+          python3 - <<'EOF'
+          import glob, sys, xml.etree.ElementTree as ET
+          files = glob.glob("app/build/test-results/testReleaseUnitTest/*.xml")
+          total = fails = errors = 0
+          for f in files:
+              r = ET.parse(f).getroot()
+              total += int(r.get("tests", 0)); fails += int(r.get("failures", 0)); errors += int(r.get("errors", 0))
+          print(f"result files: {len(files)}   tests run: {total}   failures: {fails}   errors: {errors}")
+          if len(files) == 0: sys.exit("no test results at all: the suite did not run")
+          if total < 50: sys.exit(f"expected at least 50 cases, found {total}")
+          sys.exit(1 if (fails or errors) else 0)
+          EOF
+
+      - name: Restore the signing key
+        env:
+          KS: ${{ secrets.COCKPIT_KEYSTORE }}
+          KS_PW: ${{ secrets.COCKPIT_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KS" ]; then echo "No keystore secret. This build would not be upgradable in place."; exit 1; fi
+          echo "$KS" | base64 -d > cockpit.p12
+          printf 'storeFile=cockpit.p12\nstorePassword=%s\nkeyAlias=cockpit\nkeyPassword=%s\n' "$KS_PW" "$KS_PW" > keystore.properties
+          keytool -list -storetype PKCS12 -keystore cockpit.p12 -storepass "$KS_PW" | grep -i 'SHA-256' || true
+
+      - name: Build the release APK
+        run: ./gradlew :app:assembleRelease --no-daemon
+
+      - name: "Gate G2 — scan the built APK"
+        run: |
+          set -euo pipefail
+          APK=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
+          echo "scanning: $APK ($(stat -c%s "$APK") bytes)"
+          HITS=$(strings -a "$APK" | grep -acE '(gsk_|AIza|ghp_|github_pat_|sk-ant-|xox[baprs]-)[A-Za-z0-9_-]{20,}' || true)
+          echo "key-shaped strings in the artefact: ${HITS:-0}"
+          [ "${HITS:-0}" = "0" ]
+
+      - name: "Gate G1 — the three numbers agree"
+        env:
+          V: ${{ steps.provenance.outputs.version }}
+        run: |
+          set -euo pipefail
+          APK=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
+          AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt2 | sort | tail -1)
+          BADGE=$("$AAPT" dump badging "$APK")
+          CODE=$(echo "$BADGE" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")
+          NAME=$(echo "$BADGE" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")
+          echo "gradle.properties: $V    versionCode: $CODE    versionName: $NAME    tag will be: v$V"
+          [ "$CODE" = "$V" ]; [ "$NAME" = "$V" ]
+          echo "APK size: $(stat -c%s "$APK") bytes"
+
+      - name: Publish
+        id: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ steps.provenance.outputs.version }}
+        run: |
+          set -euo pipefail
+          APK=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
+          OUT="${V}-cockpit-v${V}.apk"
+          cp "$APK" "$OUT"
+          if gh release view "v${V}" >/dev/null 2>&1; then
+            echo "NOTHING WAS PUBLISHED: release v${V} already exists. Bump appVersion in gradle.properties if the app changed."
+            echo "published=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          gh release create "v${V}" "$OUT" --title "Cockpit v${V}" --notes "Cockpit by Mantra Productions: the CPU number in the status bar, the phone's health in the notification, the apps in memory and the hand on them. Build ${GITHUB_RUN_NUMBER} from $(git rev-parse --short HEAD)."
+          echo "published=true" >> "$GITHUB_OUTPUT"
+
+      - name: Keep the two newest releases
+        if: steps.publish.outputs.published == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --limit 200 --json tagName,createdAt --jq 'sort_by(.createdAt) | reverse | .[2:] | .[].tagName' | while read -r tag; do
+            [ -z "$tag" ] && continue
+            gh release delete "$tag" --yes --cleanup-tag || true
+            echo "removed $tag"
+          done
