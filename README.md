@@ -18,12 +18,28 @@ and any other statistical data one hacker should have in his phone."*
 - **The notification**: the headline (cpu, GHz, RAM, swap), then RAM in detail, battery with
   temperature, thermal status, uptime, storage, each core, and the apps used most recently. Three
   buttons: the Termux cockpit page, this app's apps screen, refresh.
+- **The line's speed**: download and upload, in megabytes a second, from the byte totals the system
+  keeps since boot. `/proc/net/dev` is the file that looks obvious and an app may not read it here.
+- **The watts**: current times voltage, positive into the battery and negative out of it. Phones
+  disagree about the units of both halves, so the app computes every plausible reading and answers
+  only when exactly one of them is a number a phone can be in. Otherwise a dash, never a guess.
+- **The gear**: which of the four numbers sit at the top. One number is one notification, because a
+  notification carries one icon; the first rides on Cockpit's own, the rest are silent under it, and
+  one switched off comes down on the next tick.
 - **The screen**: the same dials, the recent apps (Usage access) with a **stop** on each, Shizuku
   when it is installed, and the permissions with the button that opens each one.
 - **The hand on it**: Android 14 and newer let no app kill another (`killBackgroundProcesses`
   touches only the caller's own package). So a stop opens App Info, where Force stop is one tap;
   with **Shizuku** installed and started, the app runs `am force-stop` as the shell user, lists
   every process with its memory (`dumpsys meminfo`) and reads the real `/proc/stat`.
+
+## The documents
+
+| file | for whom |
+|---|---|
+| [`HANDOFF.md`](HANDOFF.md) | anybody picking the app up: what it is now, and what has never been proven |
+| [`DEVELOPMENT.md`](DEVELOPMENT.md) | anybody about to change it: every bug, every decision, and what each one cost |
+| [`DELIVERY_RECORD.md`](DELIVERY_RECORD.md) | what was measured for the build that shipped, and what was not |
 
 ## Install
 
@@ -41,6 +57,6 @@ signing key is a PKCS12 made on the phone; its copy is in `~/.cockpit-signing/` 
 two repository secrets. Nothing here builds on the phone: no Java in Termux.
 
 ```bash
-python3 scripts/verify.py        # the structural checks, on any machine
-./gradlew :app:testReleaseUnitTest   # Test 1, where there is a JDK
+python3 scripts/verify.py            # the 35 structural checks, on any machine
+./gradlew :app:testReleaseUnitTest   # Test 1, where there is an Android SDK
 ```

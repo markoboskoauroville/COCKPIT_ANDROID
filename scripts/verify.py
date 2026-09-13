@@ -9,7 +9,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MAIN = ROOT / "app/src/main/java/com/mantra/cockpit"
 failures, checks = [], []
-TEST_FLOOR = 50
+TEST_FLOOR = 85
 
 
 def code_only(text):
@@ -63,6 +63,33 @@ check(f"at least {TEST_FLOOR} unit tests", n >= TEST_FLOOR, f"{n} @Test cases")
 # 7 the proguard keeps the shell service Shizuku creates by name
 pg = (ROOT / "app/proguard-rules.pro").read_text()
 check("R8 keeps ShellService and IShell", "-keep class com.mantra.cockpit.ShellService" in pg and "IShell" in pg, "present")
+
+# 8 the second reader is as pure as the first: Bar decides what is at the top, and it is tested
+# on a desk beside Probe rather than on a phone
+bar = code_only((MAIN / "Bar.kt").read_text())
+bar_android = re.findall(r"^import (android\.|androidx\.).*$", bar, re.M)
+check("Bar.kt imports nothing from Android", not bar_android, f"{len(re.findall(r'^import ', bar, re.M))} imports examined, {len(bar_android)} from android")
+
+# 9 a number switched off must come DOWN from the bar. A notification nobody cancels keeps showing
+# a figure that has stopped being refreshed, and it does that quietly (silent-failure.md)
+check("the service cancels the dials that are switched off, every tick", "Bar.stale(off)" in svc and "nm.cancel(id)" in svc, f"stale read {svc.count('Bar.stale(off)')}x, cancel called {svc.count('nm.cancel(id)')}x")
+check("the service takes every extra number down when it stops", svc.count("cancelExtras()") >= 3, f"{svc.count('cancelExtras()')} mentions: the definition, the stop, the destroy")
+
+# 10 no glyph reaches the bar without being cut to what the bar can draw
+icon = code_only((MAIN / "NumberIcon.kt").read_text())
+check("NumberIcon cuts a glyph to what the bar can draw", "take(Probe.BAR_GLYPHS)" in icon, "present")
+check("the bar's ceiling is three characters", "BAR_GLYPHS = 3" in probe, "present")
+
+# 11 the upgrade promise, structurally: a phone coming from v1 keeps the bar it had, so every dial
+# added after the cpu one starts switched off
+store = code_only((MAIN / "Store.kt").read_text())
+dial_keys = re.findall(r'^\s*[A-Z_]+\("([a-z]+)"', code_only((MAIN / "Bar.kt").read_text()), re.M)
+missing = [k for k in dial_keys if k != "cpu" and f'Dial.{k.upper()}.key' not in store]
+check("every dial added after v1 starts switched off (the upgrade keeps the bar it had)", not missing and len(dial_keys) >= 2, f"{len(dial_keys)} dials, {len(missing)} not defaulted off: {missing}")
+
+# 12 the choice can be put back the way it shipped (design-language.md 7)
+screen = code_only((MAIN / "MainActivity.kt").read_text())
+check("the settings offer the way back to what shipped", "store.resetBar()" in screen and "resetBar" in store, "the button and the store agree")
 
 print(f"\n{len(checks)} checks, {len(failures)} failed" + (": " + ", ".join(failures) if failures else ""))
 sys.exit(1 if failures else 0)

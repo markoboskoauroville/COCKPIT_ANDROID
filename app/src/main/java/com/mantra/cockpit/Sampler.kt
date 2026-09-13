@@ -5,6 +5,7 @@ import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.TrafficStats
 import android.content.pm.PackageManager
 import android.os.BatteryManager
 import android.os.Build
@@ -34,6 +35,8 @@ class Sampler(private val context: Context) {
         val batteryPct: Int?,
         val batteryTempC: Float?,
         val batteryCharging: Boolean,
+        val net: Probe.NetRate?,
+        val watts: Double?,
         val thermal: Int?,
         val uptimeS: Long,
         val storageFreeGb: Double,
@@ -47,6 +50,7 @@ class Sampler(private val context: Context) {
     }
 
     private var prev: Probe.CpuSample? = null
+    private var prevNet: Probe.NetSample? = null
     private var prevStat: Pair<Long, Long>? = null
     private var lastRecent: List<RecentApp> = emptyList()
     private var lastRecentAt = 0L
@@ -67,6 +71,24 @@ class Sampler(private val context: Context) {
         val temp = bat?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1)?.takeIf { it > 0 }?.let { it / 10f }
         val status = bat?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
         val charging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
+
+        // The line's speed: the byte totals since boot, and the difference from the last reading.
+        // TrafficStats answers -1 where a device does not keep them, and Probe.rate reads that as
+        // no rate rather than as sixteen exabytes a second.
+        val netNow = Probe.NetSample(now.nanos, TrafficStats.getTotalRxBytes(), TrafficStats.getTotalTxBytes())
+        val net = Probe.rate(prevNet, netNow)
+        prevNet = netNow
+
+        // The watts. getLongProperty answers Long.MIN_VALUE where the property is not supported,
+        // and some phones answer zero while they think about it; both are handed on as they are,
+        // because Probe.watts is where every unreadable case turns into a dash, in one place, on a
+        // desk, rather than here on the phone where nothing can be tested.
+        val bm = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+        val watts = Probe.watts(
+            bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW),
+            bat?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1),
+            charging,
+        )
         val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         val thermal = if (Build.VERSION.SDK_INT >= 29) pm.currentThermalStatus else null
         val st = StatFs(context.filesDir.path)
@@ -82,7 +104,7 @@ class Sampler(private val context: Context) {
         }
         return Snapshot(
             at = t, busy = busy, clusters = Probe.clusters(), memory = mem, lowMemory = mi.lowMemory,
-            batteryPct = pct, batteryTempC = temp, batteryCharging = charging, thermal = thermal,
+            batteryPct = pct, batteryTempC = temp, batteryCharging = charging, net = net, watts = watts, thermal = thermal,
             uptimeS = SystemClock.elapsedRealtime() / 1000,
             storageFreeGb = st.availableBytes / 1e9, storageTotalGb = st.totalBytes / 1e9,
             recent = lastRecent, usageAccess = hasUsageAccess(), shellCpu = shellCpu, shellProcs = lastProcs,

@@ -92,6 +92,9 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.material3:material3")
+    // The gear. Named explicitly rather than taken from material3's transitive graph, which is
+    // a dependency nobody declared and therefore one nobody will keep.
+    implementation("androidx.compose.material:material-icons-core")
 
     // Shizuku: the shell user's rights, for force-stop and dumpsys, when the person has installed
     // and started Shizuku. Optional at run time; the app works without it and says what it lacks.

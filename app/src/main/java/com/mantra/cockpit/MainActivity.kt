@@ -28,6 +28,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -88,6 +91,7 @@ class MainActivity : ComponentActivity() {
         var update by remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
         var status by remember { mutableStateOf("") }
         var tickVersion by remember { mutableStateOf(0) }
+        var gearOpen by remember { mutableStateOf(false) }
         val sampler = remember { Sampler(this) }
         val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) { store.serviceWanted = true; CockpitService.start(this); serviceOn = true }
@@ -106,6 +110,8 @@ class MainActivity : ComponentActivity() {
         val s = snap
         val notifOk = if (Build.VERSION.SDK_INT >= 33) checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED else true
 
+        if (gearOpen) { BarSettings(store, s) { gearOpen = false }; return }
+
         LazyColumn(
             modifier = Modifier.fillMaxSize().background(Palette.bg).safeDrawingPadding().padding(horizontal = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -114,7 +120,8 @@ class MainActivity : ComponentActivity() {
                 Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text(buildString { append("COCK"); append("PIT") }, color = Palette.sand, fontSize = 18.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 3.sp)
                     Text(Updates.describe(update, BuildConfig.VERSION_CODE) + " · " + (if (s != null) "read " + ago(s.at) else "reading"), color = Palette.dim, fontSize = 11.sp, fontFamily = FontFamily.Monospace,
-                        modifier = Modifier.clickable { UpdateCheck.check(BuildConfig.VERSION_CODE) { st -> update = st; (st as? UpdateState.Available)?.let { UpdateCheck.download(this@MainActivity, it.url) } } })
+                        modifier = Modifier.weight(1f).padding(horizontal = 10.dp).clickable { UpdateCheck.check(BuildConfig.VERSION_CODE) { st -> update = st; (st as? UpdateState.Available)?.let { UpdateCheck.download(this@MainActivity, it.url) } } })
+                    Icon(Icons.Filled.Settings, "settings", tint = Palette.sand, modifier = Modifier.width(28.dp).clickable { gearOpen = true })
                 }
             }
             item { Heading("1 · the number in the bar") }
@@ -148,6 +155,19 @@ class MainActivity : ComponentActivity() {
                     Dial("% battery", s?.batteryPct?.toString(), s?.let { (it.batteryTempC?.let { t -> "$t °C · " } ?: "") + (if (it.batteryCharging) "charging" else "discharging") } ?: "battery", s?.batteryPct, (s?.batteryPct ?: 100) < 15, Modifier.weight(1f))
                     Dial("thermal", s?.thermalName, s?.let { "status ${it.thermal ?: "?"} of 6" } ?: "PowerManager", s?.thermal?.let { it * 100 / 6 }, (s?.thermal ?: 0) >= 3, Modifier.weight(1f))
                 }
+            }
+            item {
+                val down = s?.net?.downBps
+                val up = s?.net?.upBps
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Dial("MB/s down", Probe.barRate(down).takeIf { down != null }, Probe.perSecond(down), down?.let { (it / 1_000_000.0).toInt() }, false, Modifier.weight(1f))
+                    Dial("MB/s up", Probe.barRate(up).takeIf { up != null }, Probe.perSecond(up), up?.let { (it / 1_000_000.0).toInt() }, false, Modifier.weight(1f))
+                }
+            }
+            item {
+                val w = s?.watts
+                Dial("watts", Probe.barWatts(w).takeIf { w != null }, Probe.wattsText(w) + (if (w == null) "" else if (s?.batteryCharging == true) " into the battery" else " out of it"),
+                    w?.let { (Math.abs(it) * 100 / Probe.WATTS_MAX_CHARGE).toInt() }, (w ?: 0.0) < -Probe.WATTS_MAX_DRAW / 2, Modifier.fillMaxWidth())
             }
             item {
                 Dial("GB free", s?.let { String.format(java.util.Locale.US, "%.1f", it.storageFreeGb) }, s?.let { "of ${String.format(java.util.Locale.US, "%.1f", it.storageTotalGb)} GB" } ?: "storage", s?.let { (100 * (it.storageTotalGb - it.storageFreeGb) / it.storageTotalGb).toInt() }, (s?.storageFreeGb ?: 10.0) < 2, Modifier.fillMaxWidth())
@@ -193,6 +213,73 @@ class MainActivity : ComponentActivity() {
                 Text("the Termux page (cockpit, 127.0.0.1:8860) shows every process and stops them over the ADB bridge; this app's number and its RAM figures come from the same counters, so the two agree. Battery: set Cockpit and Termux to Unrestricted or Android puts the number to sleep. Autostart after a reboot: ${if (store.autostart) "on" else "off"} (tap to change).", color = Palette.dim, fontSize = 11.sp, fontFamily = FontFamily.Monospace,
                     modifier = Modifier.padding(top = 6.dp, bottom = 16.dp).clickable { store.autostart = !store.autostart; tickVersion += 1 })
                 if (tickVersion < 0) Text("")   // keeps the recomposition key in use
+            }
+        }
+    }
+
+    /**
+     * THE GEAR: which numbers sit at the top of the phone.
+     *
+     * A tick box per dial, because more than one can be in force at once (design-language.md 6),
+     * every row carrying the number it would show right now so the choice can be judged against
+     * what it does rather than against its name. The way out is at the RIGHT-HAND end of the top
+     * row and it does not move (design-language.md, the way out).
+     *
+     * Nothing here appears or disappears: the reset is always on the row, dimmed while the choice
+     * is already the shipped one.
+     */
+    @Composable
+    private fun BarSettings(store: Store, s: Sampler.Snapshot?, onClose: () -> Unit) {
+        var off by remember { mutableStateOf(store.barOff) }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().background(Palette.bg).safeDrawingPadding().padding(horizontal = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            item {
+                Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("SETTINGS", color = Palette.sand, fontSize = 18.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 3.sp)
+                    Button("close", true, Modifier, onClick = onClose)
+                }
+            }
+            item { Heading("at the top of the phone") }
+            items(Dial.entries.toList()) { dial ->
+                val on = dial.key !in off
+                TickRow(on, dial.label, dial.unit, Bar.glyph(dial, s?.busy?.pct, s?.net?.downBps, s?.net?.upBps, s?.watts), dial.caption) {
+                    off = if (on) off + dial.key else off - dial.key
+                    store.barOff = off
+                }
+            }
+            item {
+                Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button("put it back the way it shipped", !store.barIsDefault, Modifier.weight(1f)) { store.resetBar(); off = store.barOff }
+                }
+                Text("One number is one notification, and a notification carries one icon. Android gives the bar the icons it has room for and drops the rest without saying so, so three numbers is a sensible ceiling on a phone that also shows a clock, a battery and a signal. The first number still showing rides on the Cockpit notification itself; the others sit under it, silent.",
+                    color = Palette.dim, fontSize = 11.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(top = 8.dp, bottom = 20.dp))
+            }
+        }
+    }
+
+    /**
+     * A tick box, the name, and the number it would be showing this second. Stacked rather than
+     * spread across five columns: a row that runs out of width is stacked, never narrowed
+     * (design-language.md 10, nothing goes off the screen).
+     */
+    @Composable
+    private fun TickRow(on: Boolean, label: String, unit: String, glyph: String, caption: String, onToggle: () -> Unit) {
+        Row(
+            Modifier.fillMaxWidth().background(Palette.surface, RoundedCornerShape(10.dp)).clickable { onToggle() }.padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.width(20.dp).height(20.dp).background(if (on) Palette.amber else Palette.line, RoundedCornerShape(4.dp)))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(label, color = if (on) Palette.sand else Palette.dim, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
+                Text(caption, color = Palette.dim, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+            }
+            Spacer(Modifier.width(8.dp))
+            Column(horizontalAlignment = Alignment.End) {
+                Text(glyph, color = if (on) Palette.sand else Palette.dim, fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                Text(unit, color = Palette.dim, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
             }
         }
     }

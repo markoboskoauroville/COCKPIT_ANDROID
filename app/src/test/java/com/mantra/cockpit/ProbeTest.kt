@@ -145,4 +145,113 @@ Total RAM: 7,590,488K (status normal)
     @Test fun nineIsNotNewerThanThirtyFive() = assertTrue(Updates.compare(35, "v9", "http://x") is UpdateState.UpToDate)
     @Test fun thirtySixIsNewerThanThirtyFive() = assertTrue(Updates.compare(35, "v36", "http://x") is UpdateState.Available)
     @Test fun noVersionInTheReleaseFails() = assertTrue(Updates.compare(1, "latest", "http://x") is UpdateState.Failed)
+
+    // ---- THE LINE'S SPEED: two byte totals and the time between them
+    private fun net(s: Double, rx: Long, tx: Long) = Probe.NetSample((s * 1e9).toLong(), rx, tx)
+
+    @Test fun aSecondOfTwoMegabytes() {
+        val r = Probe.rate(net(10.0, 1_000_000, 500_000), net(11.0, 3_000_000, 700_000))!!
+        assertEquals(2_000_000L, r.downBps); assertEquals(200_000L, r.upBps)
+    }
+    @Test fun halfASecondIsDoubledNotHalved() =
+        assertEquals(2_000_000L, Probe.rate(net(10.0, 0, 0), net(10.5, 1_000_000, 0))!!.downBps)
+    @Test fun noTimePassedIsNoRate() = assertNull(Probe.rate(net(10.0, 0, 0), net(10.0, 5, 5)))
+    @Test fun timeGoingBackwardsIsNoRate() = assertNull(Probe.rate(net(11.0, 0, 0), net(10.0, 5, 5)))
+    @Test fun aRebootResetsTheCountersAndThatIsNotTerabytes() =
+        assertNull(Probe.rate(net(10.0, 9_000_000_000L, 9_000_000_000L), net(11.0, 1_000, 1_000)))
+    @Test fun anUploadThatWentBackwardsIsAlsoNull() =
+        assertNull(Probe.rate(net(10.0, 0, 9_000_000), net(11.0, 5_000, 1_000)))
+    @Test fun unsupportedIsMinusOneAndNotAHugeNumber() {
+        assertNull(Probe.rate(net(10.0, -1, -1), net(11.0, -1, -1)))
+        assertNull(Probe.rate(net(10.0, 0, 0), net(11.0, -1, 0)))
+    }
+    @Test fun oneMissingSampleIsNoRate() { assertNull(Probe.rate(null, net(10.0, 0, 0))); assertNull(Probe.rate(net(10.0, 0, 0), null)) }
+    @Test fun anIdleLineIsZeroNotNull() = assertEquals(0L, Probe.rate(net(10.0, 77, 77), net(12.0, 77, 77))!!.downBps)
+
+    @Test fun theSpokenRate() {
+        assertEquals("0 B/s", Probe.perSecond(0)); assertEquals("999 B/s", Probe.perSecond(999))
+        assertEquals("1 kB/s", Probe.perSecond(1_000)); assertEquals("812 kB/s", Probe.perSecond(812_000))
+        assertEquals("1.4 MB/s", Probe.perSecond(1_400_000)); assertEquals("\u2013", Probe.perSecond(null))
+    }
+    @Test fun theRateNeverPrintsAThousandKilobytes() = assertEquals("1.0 MB/s", Probe.perSecond(999_999))
+
+    // ---- THE WATTS: volts times amps, and neither unit is to be trusted on its own
+    @Test fun microampsCharging() = assertEquals(12.6, Probe.watts(3_000_000L, 4_200, true)!!, 0.05)
+    @Test fun milliampsUnderAMicroampName() = assertEquals(12.6, Probe.watts(3_000L, 4_200, true)!!, 0.05)
+    @Test fun theDrawIsNegativeWhateverSignThePhoneUsed() {
+        assertTrue(Probe.watts(-300_000L, 3_900, false)!! < 0)
+        assertTrue(Probe.watts(300_000L, 3_900, false)!! < 0)
+        assertEquals(-1.17, Probe.watts(300_000L, 3_900, false)!!, 0.02)
+    }
+    @Test fun chargingIsPositiveWhateverSignThePhoneUsed() = assertTrue(Probe.watts(-3_000_000L, 4_200, true)!! > 0)
+    @Test fun twoReadingsBothPlausibleIsADashNotAGuess() = assertNull(Probe.watts(20_000L, 4_000, true))
+    @Test fun neitherReadingPlausibleIsADash() = assertNull(Probe.watts(10_000L, 4_000, false))
+    @Test fun noCurrentIsADash() { assertNull(Probe.watts(0L, 4_200, true)); assertNull(Probe.watts(null, 4_200, true)); assertNull(Probe.watts(Long.MIN_VALUE, 4_200, true)) }
+    @Test fun noVoltageIsADash() { assertNull(Probe.watts(3_000_000L, 0, true)); assertNull(Probe.watts(3_000_000L, null, true)) }
+    @Test fun aFortyFiveWattChargerFits() = assertEquals(45.0, Probe.watts(9_000_000L, 5_000, true)!!, 0.5)
+    @Test fun aHundredAmpsIsNotAReading() = assertNull(Probe.watts(100_000_000L, 4_200, true))
+
+    @Test fun theVoltageUnitIsRecognisedNotAssumed() {
+        assertEquals(4.2, Probe.volts(4_200)!!, 0.001); assertEquals(4.2, Probe.volts(4_200_000)!!, 0.001)
+        assertEquals(4.0, Probe.volts(4)!!, 0.001); assertNull(Probe.volts(100)); assertNull(Probe.volts(0)); assertNull(Probe.volts(null))
+    }
+    @Test fun theSpokenWatts() {
+        assertTrue(Probe.wattsText(23.4).startsWith("charging 23.4"))
+        assertTrue(Probe.wattsText(-4.1).startsWith("drawing 4.1"))
+        assertTrue(Probe.wattsText(null).contains("no reading"))
+    }
+
+    // ---- THE GLYPH: three characters, at every magnitude, or the bar shows a smudge
+    @Test fun theBarRateReads() {
+        assertEquals("\u2013", Probe.barRate(null)); assertEquals("0.0", Probe.barRate(0))
+        assertEquals("0.8", Probe.barRate(812_000)); assertEquals("1.4", Probe.barRate(1_400_000))
+        assertEquals("9.9", Probe.barRate(9_900_000)); assertEquals("10", Probe.barRate(9_950_000))
+        assertEquals("12", Probe.barRate(12_000_000)); assertEquals("99", Probe.barRate(99_400_000))
+        assertEquals("99+", Probe.barRate(120_000_000))
+    }
+    @Test fun theBarWattsDropTheSignAndKeepTheSize() {
+        assertEquals("4.1", Probe.barWatts(-4.1)); assertEquals("23", Probe.barWatts(23.4)); assertEquals("\u2013", Probe.barWatts(null))
+    }
+    @Test fun noGlyphIsEverLongerThanTheBarAllows() {
+        val rates = listOf<Long?>(null, 0, 1, 999, 1_000, 812_000, 1_400_000, 9_949_999, 9_950_000, 12_000_000, 99_400_000, 99_500_000, 1_000_000_000, Long.MAX_VALUE / 2)
+        val watts = listOf<Double?>(null, 0.0, 0.05, 4.1, 9.94, 9.95, 23.4, 99.4, 99.5, 149.9)
+        var n = 0
+        for (d in Dial.entries) for (r in rates) for (w in watts) for (c in listOf<Int?>(null, 0, 37, 100, 250, -5)) {
+            val g = Bar.glyph(d, c, r, r, w)
+            assertTrue("$d gave '$g'", g.length <= Probe.BAR_GLYPHS && g.isNotEmpty())
+            n++
+        }
+        assertTrue("combinations walked: $n", n >= 1000)
+    }
+
+    // ---- WHICH NUMBERS ARE AT THE TOP, and the ones that must be taken down
+    @Test fun nothingHiddenIsEveryDial() = assertEquals(Dial.entries.size, Bar.visible(emptySet()).size)
+    @Test fun theLeadDialRidesOnTheForegroundNotification() {
+        val hidden = setOf("down", "up")
+        assertEquals(listOf(Dial.CPU, Dial.WATTS), Bar.visible(hidden))
+        assertEquals(listOf(Dial.WATTS), Bar.extras(hidden))
+    }
+    @Test fun theLeadDialsOwnIdIsCancelledBecauseNothingPostsIt() =
+        assertTrue(Bar.idOf(Dial.CPU) in Bar.stale(setOf("down", "up")))
+    @Test fun aSwitchedOffDialIsCancelled() = assertTrue(Bar.idOf(Dial.UP) in Bar.stale(setOf("up")))
+    @Test fun aShowingDialIsNotCancelled() = assertTrue(Bar.idOf(Dial.UP) !in Bar.stale(emptySet()))
+    @Test fun everythingHiddenPostsNothingExtraAndCancelsAll() {
+        val all = Dial.entries.map { it.key }.toSet()
+        assertTrue(Bar.visible(all).isEmpty()); assertTrue(Bar.extras(all).isEmpty())
+        assertEquals(Dial.entries.size, Bar.stale(all).size)
+    }
+    @Test fun noTwoDialsShareANotificationId() =
+        assertEquals(Dial.entries.size, Dial.entries.map { Bar.idOf(it) }.toSet().size)
+    @Test fun noDialCollidesWithTheForegroundNotification() =
+        assertTrue(Dial.entries.none { Bar.idOf(it) == Bar.FOREGROUND_ID })
+    @Test fun aDialIsFoundByTheKeyThatIsStored() {
+        for (d in Dial.entries) assertEquals(d, Dial.byKey(d.key))
+        assertNull(Dial.byKey("a dial from a later version"))
+    }
+    @Test fun everyDialKeyIsDistinct() = assertEquals(Dial.entries.size, Dial.entries.map { it.key }.toSet().size)
+    @Test fun theLineCarriesTheUnitTheGlyphCannot() {
+        assertTrue(Bar.line(Dial.DOWN, null, 1_400_000, 0, null).contains("MB/s"))
+        assertTrue(Bar.line(Dial.WATTS, null, null, null, 23.4).contains("charging"))
+        assertTrue(Bar.line(Dial.CPU, null, null, null, null).contains("no reading"))
+    }
 }

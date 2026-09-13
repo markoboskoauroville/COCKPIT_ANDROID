@@ -144,6 +144,100 @@ object Probe {
         val d = seconds / 86400; val h = seconds % 86400 / 3600; val m = seconds % 3600 / 60
         return (if (d > 0) "${d}d " else "") + "${h}h ${m}m"
     }
+
+    // ------------------------------------------------------------------ THE LINE'S SPEED
+    //
+    // Two readings and a subtraction, the same shape as the idle counters above, from the byte
+    // totals the system keeps since boot. /proc/net/dev is the file that looks obvious and it is
+    // not readable by an app on this phone; TrafficStats is. Its totals are monotonic until a
+    // reboot, and it answers -1 (UNSUPPORTED) on a device that does not keep them, so both of
+    // those are a null rate rather than an enormous one.
+
+    data class NetSample(val nanos: Long, val rxBytes: Long, val txBytes: Long)
+    data class NetRate(val downBps: Long, val upBps: Long)
+
+    fun rate(prev: NetSample?, now: NetSample?): NetRate? {
+        if (prev == null || now == null) return null
+        if (prev.rxBytes < 0 || prev.txBytes < 0 || now.rxBytes < 0 || now.txBytes < 0) return null
+        if (now.rxBytes < prev.rxBytes || now.txBytes < prev.txBytes) return null
+        val dtNs = now.nanos - prev.nanos
+        if (dtNs <= 0) return null
+        val secs = dtNs / 1_000_000_000.0
+        return NetRate(Math.round((now.rxBytes - prev.rxBytes) / secs), Math.round((now.txBytes - prev.txBytes) / secs))
+    }
+
+    /** For the notification, where there is room for the unit: "0 B/s", "812 kB/s", "1.4 MB/s". */
+    fun perSecond(bps: Long?): String = when {
+        bps == null -> "–"
+        bps < 1_000 -> "$bps B/s"
+        bps < 999_500 -> "${(bps + 500) / 1_000} kB/s"
+        else -> String.format(java.util.Locale.US, "%.1f MB/s", bps / 1e6)
+    }
+
+    // ------------------------------------------------------------------ THE WATTS
+    //
+    // Volts times amps, and the trap is that phones disagree about the units of both. The current
+    // property is documented in microamps and several makers answer in milliamps under that name;
+    // the voltage extra is documented in millivolts and some answer in microvolts. So neither
+    // reading is trusted on its own: every plausible reading of the units is computed, and the
+    // answer is given ONLY when exactly one of them lands in a band a phone can actually be in.
+    // Two candidates in the band, or none, is a dash — a wrong number said confidently is worse
+    // than no number, and this one would be read as a fact about a charger.
+    //
+    // The sign is NOT taken from the current's own sign, because that is the other thing makers
+    // invert. It comes from the battery status, which is not ambiguous: charging is positive,
+    // anything else is the draw.
+
+    const val WATTS_MIN = 0.05
+    const val WATTS_MAX_DRAW = 20.0
+    const val WATTS_MAX_CHARGE = 150.0
+
+    /** Millivolts, microvolts or whole volts, each recognised by the band it falls in. */
+    fun volts(reported: Int?): Double? = when {
+        reported == null -> null
+        reported in 2_000..20_000 -> reported / 1_000.0
+        reported in 2_000_000..20_000_000 -> reported / 1_000_000.0
+        reported in 2..20 -> reported.toDouble()
+        else -> null
+    }
+
+    fun watts(rawCurrent: Long?, reportedVoltage: Int?, charging: Boolean): Double? {
+        if (rawCurrent == null || rawCurrent == 0L || rawCurrent == Long.MIN_VALUE) return null
+        val v = volts(reportedVoltage) ?: return null
+        val amps = Math.abs(rawCurrent).toDouble()
+        val ceiling = if (charging) WATTS_MAX_CHARGE else WATTS_MAX_DRAW
+        val candidates = listOf(v * amps / 1_000_000.0, v * amps / 1_000.0).filter { it >= WATTS_MIN && it <= ceiling }
+        if (candidates.size != 1) return null
+        return if (charging) candidates[0] else -candidates[0]
+    }
+
+    /** For the notification: "charging 23.4 W", "drawing 4.1 W", "no reading". */
+    fun wattsText(w: Double?): String = when {
+        w == null -> "watts: no reading this phone agrees with"
+        w >= 0 -> String.format(java.util.Locale.US, "charging %.1f W", w)
+        else -> String.format(java.util.Locale.US, "drawing %.1f W", -w)
+    }
+
+    // ------------------------------------------------------------------ THE GLYPH AT THE TOP
+    //
+    // A status-bar icon is a square a few millimetres across. Three characters is what fits and
+    // stays legible (android-app.md 4): more than three and the bar shows a smudge. So every
+    // number that can go up there passes through here, and Test 1 asserts the length at every
+    // magnitude rather than trusting the formatting to be reasonable.
+
+    const val BAR_GLYPHS = 3
+
+    private fun short(value: Double): String = when {
+        value >= 99.5 -> "99+"
+        value >= 9.95 -> Math.round(value).toString()
+        else -> String.format(java.util.Locale.US, "%.1f", value)
+    }
+
+    /** Megabytes a second, always, so two numbers at the top can be compared without a unit. */
+    fun barRate(bps: Long?): String = if (bps == null) "–" else short(bps / 1e6)
+
+    /** The magnitude only: the phone's own charging bolt, one icon away, says which way. */
+    fun barWatts(w: Double?): String = if (w == null) "–" else short(Math.abs(w))
 }
 
 /**

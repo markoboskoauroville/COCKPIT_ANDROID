@@ -19,8 +19,16 @@ object NumberIcon {
 
     private const val SIZE = 96
 
-    fun of(value: Int?): IconCompat {
-        val text = if (value == null) "–" else value.coerceIn(0, 100).toString()
+    fun of(value: Int?): IconCompat = of(if (value == null) "–" else value.coerceIn(0, 100).toString())
+
+    /**
+     * Any glyph the bar can hold. The string is cut to three characters here as well as being
+     * built to fit (Probe.BAR_GLYPHS): a four-character number would not be refused by the bar,
+     * it would be drawn small enough to be a smudge, and a smudge reads as a broken icon rather
+     * than as a bug.
+     */
+    fun of(glyph: String): IconCompat {
+        val text = glyph.take(Probe.BAR_GLYPHS).ifEmpty { "–" }
         val bmp = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
         canvas.drawColor(Color.TRANSPARENT)
