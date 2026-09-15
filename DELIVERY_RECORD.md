@@ -5,6 +5,30 @@ The gates run in GitHub Actions on every push (`.github/workflows/build-apk.yml`
 G3 the structural checks (`scripts/verify.py`) and Lint (blocking), G5 loops counted, Test 1
 (JUnit). G4, G6, G7, G8 are not run for this edition and are said so here.
 
+## v3, 13.9.2026 — the two directions as their own dials
+
+MEASURED, before the push, on a sandbox with a JDK and no Android SDK:
+
+    Test 1          94 JUnit cases, 0 failed (87 inherited and re-run, 7 new)
+    verify.py       35 structural checks, 0 failed
+
+    proven red      the draw dial made to ignore the direction   2 cases red
+                    (mutation confirmed to have changed the file)
+
+    found by a test One inherited case went red honestly: it had pinned the exact dial roster
+                    rather than the rule. Rewritten to build its hidden set from the roster.
+
+NOT TESTED   **v3 has not run on a phone.** v2 has. Nothing is yet written down about what the
+             watts reading does on this phone, so whether `draw` and `charge` will show numbers or
+             dashes there is unknown. G4, G6, G7 not run.
+             G8, the upgrade: reasoned and structurally checked, NOT run. Note that a phone whose
+             owner has already used the gear will get `draw` and `charge` switched ON, by the rule
+             in design-language.md 7; a phone that has never opened it sees no change.
+
+ACCEPTED     Six dials where four would do: the combined `watts` dial stays beside the two
+             directional ones rather than being removed from a phone that already has it.
+             The repository is private, so the in-app update check cannot work until it is public.
+
 ## v2, 13.9.2026 — the line's speed, the watts, and the gear
 
 Built and published by run 4 of the workflow on commit df1eb94, green at the first attempt:

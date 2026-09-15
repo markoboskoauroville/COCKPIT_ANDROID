@@ -81,6 +81,34 @@ it is a real cost: a dial added in v3 will appear at the top of the phone withou
 **The documents were split** into `HANDOFF.md` and this file, with a stub left at `HANDOVER.md`
 (`repository-documents.md` §7). v1's handover was already doing two jobs.
 
+### A test that pinned the roster instead of the rule
+
+**v3.** `theLeadDialRidesOnTheForegroundNotification` asserted `listOf(Dial.CPU, Dial.WATTS)` from a
+hidden set written out by hand. Adding two dials made it red while nothing was wrong: the rule it
+meant to test — *the first visible dial rides on the foreground notification, the rest are extras* —
+still held. Rewritten to build its hidden set from the roster, so the next dial does not fail it.
+
+**The lesson is not "that test was bad".** It is that a case which enumerates a list is a case that
+fails when the list grows, and the failure carries no information. Assert the rule.
+
+---
+
+## PART TWO AND A HALF — v3
+
+**Two dials, one direction each.** Marko, 13.9.2026, with v2 on the phone: *"It needs to show power
+drawn all the time and power charging all the time."* The combined `watts` dial stays, because it is
+already on his phone and nothing that was there disappears; `draw` and `charge` are added beside it.
+
+**A dash in the wrong direction is not a zero.** While the charger is in, the `draw` dial reads `–`,
+not `0.0`. The battery is not drawing nothing, it is charging, and the other dial has that number.
+`0.0` would be a measurement nobody made. `aDashInTheWrongDirectionIsNotAZero` holds this.
+
+**The cost of storing what is switched off, paid for the first time.** A phone that has never opened
+the gear gets the new default and sees no change. **A phone whose owner has already ticked something
+has a stored set that cannot contain the new keys, so `draw` and `charge` arrive switched ON.** That
+follows from `design-language.md` §7 and it is the right rule; it is written here because it is a
+real cost and it will surprise somebody once. The reset button puts it back.
+
 ---
 
 ## PART THREE — THE VERSIONS
@@ -89,6 +117,7 @@ it is a real cost: a dial added in v3 will appear at the top of the phone withou
 |---|---|---|
 | 1 | 13.9.2026 | the CPU number in the bar, the health notification, recent apps with a stop, Shizuku |
 | 2 | 13.9.2026 | download and upload speed, watts charging or drawing, the gear that chooses what is at the top |
+| 3 | 13.9.2026 | the two directions as their own dials: watts out and watts in, each a dash in the other state |
 
 ---
 

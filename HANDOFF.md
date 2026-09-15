@@ -1,8 +1,8 @@
 # HANDOFF: COCKPIT_ANDROID
 
-    version      2
+    version      3
     repository   markoboskoauroville/COCKPIT_ANDROID (private)
-    artefact     2-cockpit-v2.apk, release tag v2
+    artefact     3-cockpit-v3.apk, release tag v3
 
 **The reasons live in [`DEVELOPMENT.md`](DEVELOPMENT.md).** Every bug, every decision and every
 rejected alternative is there. Nothing historical belongs in this file.
@@ -16,7 +16,7 @@ COCKPIT_TERMUX is the other half, on 127.0.0.1:8860, reading the same counters s
 
 ## THE NUMBERS AT THE TOP
 
-Four dials, chosen with the gear on the main screen. **One number is one notification, because a
+Six dials, chosen with the gear on the main screen. **One number is one notification, because a
 notification carries one icon.** The first chosen dial rides on the service's own notification; the
 rest get their own, silent, on the `cockpit_bar` channel at IMPORTANCE_MIN. A dial switched off is
 cancelled on the next tick.
@@ -27,6 +27,8 @@ cancelled on the next tick.
 | `down` | MB/s | `TrafficStats.getTotalRxBytes`, differenced |
 | `up` | MB/s | `TrafficStats.getTotalTxBytes`, differenced |
 | `watts` | W, unsigned | current × voltage, sign from the battery status |
+| `draw` | W out, or `–` | the same reading, shown only while the battery is discharging |
+| `charge` | W in, or `–` | the same reading, shown only while it is charging |
 
 **Three characters is the whole budget** (`Probe.BAR_GLYPHS`). Every glyph goes through
 `Probe.short`, which gives one decimal below 10, a whole number to 99, then `99+`. A reading that
@@ -84,11 +86,12 @@ kotlinc -cp junit-4.13.2.jar \
 java -cp test1.jar:junit-4.13.2.jar:hamcrest-core-1.3.jar org.junit.runner.JUnitCore com.mantra.cockpit.ProbeTest
 ```
 
-87 cases, under a third of a second. Use it before every push; CI is five to eight minutes.
+94 cases, under a third of a second. Use it before every push; CI is five to eight minutes.
 
 ## WHAT HAS NEVER BEEN PROVEN
 
-- **Nothing in v2 has run on a phone.** Not one of the new numbers has been seen at the top.
+- **v2 is on the phone; v3 is not.** The two directional dials have never been seen at the top,
+  and what the watts reading does on this phone has not yet been written down here.
 - **Which units this phone reports.** `Probe.watts` refuses to guess, so the first thing v2 may do
   is show a dash where a wattage was wanted. That is the designed failure, not the desired one, and
   the answer is to read what the phone reports and write it into `DEVELOPMENT.md`.

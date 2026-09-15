@@ -9,7 +9,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MAIN = ROOT / "app/src/main/java/com/mantra/cockpit"
 failures, checks = [], []
-TEST_FLOOR = 85
+TEST_FLOOR = 94
 
 
 def code_only(text):

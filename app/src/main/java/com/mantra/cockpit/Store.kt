@@ -38,6 +38,6 @@ class Store(context: Context) {
          * bar it already had, so the three dials added in v2 start off — and a fresh install of v2
          * then matches an upgraded one exactly, which is the thing Test 4 checks.
          */
-        val DEFAULT_BAR_OFF: Set<String> = setOf(Dial.DOWN.key, Dial.UP.key, Dial.WATTS.key)
+        val DEFAULT_BAR_OFF: Set<String> = setOf(Dial.DOWN.key, Dial.UP.key, Dial.WATTS.key, Dial.DRAW.key, Dial.CHARGE.key)
     }
 }

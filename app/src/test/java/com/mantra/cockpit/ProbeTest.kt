@@ -227,7 +227,9 @@ Total RAM: 7,590,488K (status normal)
     // ---- WHICH NUMBERS ARE AT THE TOP, and the ones that must be taken down
     @Test fun nothingHiddenIsEveryDial() = assertEquals(Dial.entries.size, Bar.visible(emptySet()).size)
     @Test fun theLeadDialRidesOnTheForegroundNotification() {
-        val hidden = setOf("down", "up")
+        // Built from the roster rather than written out, so that adding a dial in a later version
+        // does not fail this case. It failed exactly that way when DRAW and CHARGE arrived.
+        val hidden = Dial.entries.map { it.key }.toSet() - Dial.CPU.key - Dial.WATTS.key
         assertEquals(listOf(Dial.CPU, Dial.WATTS), Bar.visible(hidden))
         assertEquals(listOf(Dial.WATTS), Bar.extras(hidden))
     }
@@ -249,6 +251,41 @@ Total RAM: 7,590,488K (status normal)
         assertNull(Dial.byKey("a dial from a later version"))
     }
     @Test fun everyDialKeyIsDistinct() = assertEquals(Dial.entries.size, Dial.entries.map { it.key }.toSet().size)
+    // ---- THE TWO DIRECTIONS, one dial each, both on the list at all times
+    @Test fun theDrawDialShowsTheDrawAndTheChargeDialDoesNot() {
+        assertEquals("4.1", Bar.glyph(Dial.DRAW, null, null, null, -4.1))
+        assertEquals("\u2013", Bar.glyph(Dial.CHARGE, null, null, null, -4.1))
+    }
+    @Test fun theChargeDialShowsTheChargeAndTheDrawDialDoesNot() {
+        assertEquals("23", Bar.glyph(Dial.CHARGE, null, null, null, 23.4))
+        assertEquals("\u2013", Bar.glyph(Dial.DRAW, null, null, null, 23.4))
+    }
+    @Test fun withNoReadingBothDirectionsAreADash() {
+        assertEquals("\u2013", Bar.glyph(Dial.DRAW, null, null, null, null))
+        assertEquals("\u2013", Bar.glyph(Dial.CHARGE, null, null, null, null))
+    }
+    @Test fun theTwoDirectionsAreNeverBothANumber() {
+        for (w in listOf<Double?>(null, -20.0, -4.1, -0.05, 0.05, 23.4, 149.9)) {
+            val d = Bar.glyph(Dial.DRAW, null, null, null, w)
+            val c = Bar.glyph(Dial.CHARGE, null, null, null, w)
+            assertTrue("w=$w gave draw=$d charge=$c", d == "\u2013" || c == "\u2013")
+        }
+    }
+    @Test fun aDashInTheWrongDirectionIsNotAZero() {
+        assertTrue(Bar.glyph(Dial.DRAW, null, null, null, 23.4) != "0.0")
+        assertTrue(Bar.glyph(Dial.CHARGE, null, null, null, -4.1) != "0.0")
+    }
+    @Test fun theDirectionalLinesSayWhyTheyAreEmpty() {
+        assertTrue(Bar.line(Dial.DRAW, null, null, null, 23.4).contains("while it charges"))
+        assertTrue(Bar.line(Dial.CHARGE, null, null, null, -4.1).contains("does not charge"))
+        assertTrue(Bar.line(Dial.DRAW, null, null, null, -4.1).contains("drawing 4.1"))
+        assertTrue(Bar.line(Dial.CHARGE, null, null, null, 23.4).contains("charging 23.4"))
+    }
+    @Test fun theCombinedDialStillCarriesBothDirections() {
+        assertEquals("4.1", Bar.glyph(Dial.WATTS, null, null, null, -4.1))
+        assertEquals("23", Bar.glyph(Dial.WATTS, null, null, null, 23.4))
+    }
+
     @Test fun theLineCarriesTheUnitTheGlyphCannot() {
         assertTrue(Bar.line(Dial.DOWN, null, 1_400_000, 0, null).contains("MB/s"))
         assertTrue(Bar.line(Dial.WATTS, null, null, null, 23.4).contains("charging"))

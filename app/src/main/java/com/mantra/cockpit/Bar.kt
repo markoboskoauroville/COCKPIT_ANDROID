@@ -17,6 +17,8 @@ enum class Dial(val key: String, val label: String, val unit: String, val captio
     DOWN("down", "download", "MB/s down", "bytes in, since the last reading"),
     UP("up", "upload", "MB/s up", "bytes out, since the last reading"),
     WATTS("watts", "power", "watts", "volts times amps, charging or drawing"),
+    DRAW("draw", "power out", "watts out", "out of the battery; a dash while the charger is in"),
+    CHARGE("charge", "power in", "watts in", "into the battery; a dash while it is not charging"),
     ;
 
     companion object {
@@ -53,6 +55,11 @@ object Bar {
         Dial.DOWN -> Probe.barRate(downBps)
         Dial.UP -> Probe.barRate(upBps)
         Dial.WATTS -> Probe.barWatts(watts)
+        // One direction each. A dash here is the absence of a reading to take, not a zero: the
+        // battery is not drawing nothing while it charges, it is charging, and the other dial has
+        // that number. Writing 0.0 in either would be a measurement nobody made.
+        Dial.DRAW -> if (watts != null && watts < 0) Probe.barWatts(watts) else "–"
+        Dial.CHARGE -> if (watts != null && watts > 0) Probe.barWatts(watts) else "–"
     }
 
     /** The line under the number, where there is room for the unit and the direction. */
@@ -61,5 +68,7 @@ object Bar {
         Dial.DOWN -> "down " + Probe.perSecond(downBps)
         Dial.UP -> "up " + Probe.perSecond(upBps)
         Dial.WATTS -> Probe.wattsText(watts)
+        Dial.DRAW -> if (watts != null && watts < 0) Probe.wattsText(watts) else "out of the battery: nothing to read while it charges"
+        Dial.CHARGE -> if (watts != null && watts > 0) Probe.wattsText(watts) else "into the battery: nothing to read while it does not charge"
     }
 }
