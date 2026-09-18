@@ -1,3 +1,5 @@
+### [Download the latest build](https://github.com/markoboskoauroville/COCKPIT_ANDROID/releases/latest)
+
 # COCKPIT_ANDROID
 
 **The CPU number in the status bar, the phone's health in the notification, the apps in memory
